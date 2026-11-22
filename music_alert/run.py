@@ -7,7 +7,9 @@ from datetime import date
 from .artists_file import read_artists_file
 from .config import Config
 from .deezer import DeezerClient, DeezerError
-from .discord import BATCH_SIZE, Discord, DiscordError, ambiguity_embed, problems_embed
+from .discord import (
+    BATCH_SIZE, Discord, DiscordError, ambiguity_embed, problems_embed, summary_embeds,
+)
 from .models import Release, Resolution
 from .resolver import resolve
 from .store import Store
@@ -108,6 +110,18 @@ def run_cycle(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord 
             for rel in batch:
                 store.add_release(rel, "posted")
             result.posted.extend(batch)
+
+    # 3b. Send one grouped text summary of what was posted.
+    if result.posted:
+        if dry_run:
+            for embed in summary_embeds(result.posted):
+                log.info("[dry run] %s\n%s", embed["title"], embed["description"])
+        else:
+            try:
+                discord.send_summary(result.posted)
+            except DiscordError as exc:
+                # The cards are already posted and saved, so do not undo that.
+                result.issues.append(f"Discord rejected the summary: {exc}")
 
     # 4. Report problems and ambiguous matches.
     for res in result.alerts:

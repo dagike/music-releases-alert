@@ -4,6 +4,8 @@ This program checks a list of artists for new music releases. It posts each new 
 
 Each post shows the artist, title, type (album, single, EP or compilation), release date, cover art, and a Deezer link.
 
+After the posts, each run sends one text summary of all new releases. The summary groups releases by artist and shows the title, release date, and Deezer link. It has no images. If the summary is longer than one Discord message allows, the program splits it into parts at artist boundaries.
+
 ## How it works
 
 The program runs all day as a Docker container. It checks for new releases at 00:15, 06:00, 12:00, and 18:00 in the server time zone. It waits at least 200 ms between Deezer requests.

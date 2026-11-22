@@ -34,10 +34,17 @@ class FakeDeezer:
 
 
 class FakeDiscord:
-    def __init__(self, fail=False):
+    def __init__(self, fail=False, fail_summary=False):
         self.fail = fail
+        self.fail_summary = fail_summary
         self.release_batches = []
+        self.summaries = []
         self.embeds = []
+
+    def send_summary(self, releases):
+        if self.fail_summary:
+            raise DiscordError("summary boom")
+        self.summaries.append(list(releases))
 
     def send_releases(self, releases):
         if self.fail:
@@ -161,3 +168,38 @@ def test_same_album_under_two_artists_posts_once(setup):
     )
     result = run_cycle(cfg, store, deezer, FakeDiscord(), today=TODAY)
     assert len(result.posted) == 1
+
+
+def test_summary_sent_once_with_only_posted_releases(setup):
+    cfg, store, artists_file = setup
+    artists_file.write_text("Justice\n")
+    deezer = FakeDeezer(
+        search={"Justice": [artist(1, "Justice")]},
+        albums={1: [album(10, "Old", "2020-01-01"), album(11, "New", "2026-03-01")]},
+    )
+    discord = FakeDiscord()
+    run_cycle(cfg, store, deezer, discord, today=TODAY)
+    assert [[r.title for r in s] for s in discord.summaries] == [["New"]]
+
+    run_cycle(cfg, store, deezer, discord, today=TODAY)  # nothing new: no summary
+    assert len(discord.summaries) == 1
+
+
+def test_no_summary_when_card_post_fails(setup):
+    cfg, store, artists_file = setup
+    artists_file.write_text("Justice\n")
+    deezer = FakeDeezer(search={"Justice": [artist(1, "Justice")]},
+                        albums={1: [album(11, "New", "2026-03-01")]})
+    discord = FakeDiscord(fail=True)
+    run_cycle(cfg, store, deezer, discord, today=TODAY)
+    assert discord.summaries == []
+
+
+def test_summary_failure_is_an_issue_and_keeps_releases_marked(setup):
+    cfg, store, artists_file = setup
+    artists_file.write_text("Justice\n")
+    deezer = FakeDeezer(search={"Justice": [artist(1, "Justice")]},
+                        albums={1: [album(11, "New", "2026-03-01")]})
+    result = run_cycle(cfg, store, deezer, FakeDiscord(fail_summary=True), today=TODAY)
+    assert any("summary" in issue for issue in result.issues)
+    assert store.has_release(11)  # not posted again next run

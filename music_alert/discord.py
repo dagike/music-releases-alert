@@ -68,6 +68,66 @@ def problems_embed(lines: list[str]) -> dict:
     return {"title": "Problems during release check", "description": text, "color": COLOR_ERROR}
 
 
+SUMMARY_LIMIT = 4000  # Discord allows 4096 characters in one embed description
+
+
+def _escape_link_text(text: str) -> str:
+    return text.replace("[", "\\[").replace("]", "\\]")
+
+
+def _summary_line(rel: Release) -> str:
+    title = rel.title[:200]
+    date = rel.release_date or "Unknown"
+    if rel.link:
+        return f"- [{_escape_link_text(title)}]({rel.link}) · {date}"
+    return f"- {title} · {date}"
+
+
+def summary_embeds(releases: list[Release], limit: int = SUMMARY_LIMIT) -> list[dict]:
+    """Build plain text summary embeds, grouped by artist, split at artist boundaries."""
+    if not releases:
+        return []
+
+    groups: dict[str, list[Release]] = {}
+    for rel in releases:
+        groups.setdefault(rel.artist_name, []).append(rel)
+
+    chunks: list[str] = []
+    current = ""
+    for artist in sorted(groups, key=str.casefold):
+        lines = [_summary_line(r) for r in sorted(groups[artist], key=lambda r: (r.release_date, r.title))]
+        header = f"**{artist[:200]}**"
+        block = header + "\n" + "\n".join(lines)
+        separator = "\n\n" if current else ""
+        if len(current) + len(separator) + len(block) <= limit:
+            current += separator + block
+            continue
+        if current:
+            chunks.append(current)
+            current = ""
+        if len(block) <= limit:
+            current = block
+            continue
+        # One artist is too big for one message: split by line and repeat the header.
+        part = header
+        for line in lines:
+            if len(part) + 1 + len(line) > limit:
+                chunks.append(part)
+                part = f"{header} (cont.)"
+            part += "\n" + line
+        current = part
+    if current:
+        chunks.append(current)
+
+    embeds = []
+    for index, text in enumerate(chunks, start=1):
+        title = f"New releases ({len(releases)})"
+        if len(chunks) > 1:
+            title += f" (part {index}/{len(chunks)})"
+        embeds.append({"title": title, "description": text, "color": COLOR_RELEASE})
+    return embeds
+
+
 class Discord:
     def __init__(self, webhook_url: str, session: requests.Session | None = None,
                  sleep: Callable[[float], None] = time.sleep):
@@ -103,6 +163,11 @@ class Discord:
 
     def send_releases(self, releases: list[Release]) -> None:
         self._post([release_embed(r) for r in releases])
+
+    def send_summary(self, releases: list[Release]) -> None:
+        """Send the grouped text summary, one embed per message."""
+        for embed in summary_embeds(releases):
+            self._post([embed])
 
     def send_embeds(self, embeds: list[dict]) -> None:
         for start in range(0, len(embeds), BATCH_SIZE):
