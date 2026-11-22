@@ -8,6 +8,7 @@ import sys
 import time
 from datetime import datetime
 
+from . import kuma
 from .artists_file import read_artists_file
 from .config import Config, load_config
 from .deezer import DeezerClient, DeezerError
@@ -40,12 +41,23 @@ def resolve_only(cfg: Config, store: Store, deezer: DeezerClient) -> int:
     return 0
 
 
+def checked_run(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord) -> bool:
+    """Run one cycle, then send an Uptime Kuma heartbeat (if configured)."""
+    started = time.monotonic()
+    try:
+        result = run_cycle(cfg, store, deezer, discord)
+    except Exception as exc:  # keep the server alive whatever happens in one run
+        log.exception("Run failed.")
+        kuma.push(cfg.kuma_push_url, False, f"Run failed: {exc}")
+        return False
+    msg = f"OK: {len(result.posted)} posted, {len(result.issues)} issue(s)"
+    kuma.push(cfg.kuma_push_url, True, msg, int((time.monotonic() - started) * 1000))
+    return True
+
+
 def serve(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord) -> None:
     def safe_run() -> None:
-        try:
-            run_cycle(cfg, store, deezer, discord)
-        except Exception:  # keep the server alive whatever happens in one run
-            log.exception("Run failed.")
+        checked_run(cfg, store, deezer, discord)
 
     if cfg.run_on_start:
         safe_run()
@@ -90,8 +102,7 @@ def main() -> int:
         run_cycle(cfg, store, deezer, discord, dry_run=True)
         return 0
     if args.once:
-        run_cycle(cfg, store, deezer, discord)
-        return 0
+        return 0 if checked_run(cfg, store, deezer, discord) else 1
 
     signal.signal(signal.SIGTERM, lambda *_: sys.exit(0))  # clean stop in Docker
     serve(cfg, store, deezer, discord)

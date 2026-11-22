@@ -66,6 +66,12 @@ docker compose run --rm music-alert python -m music_alert --once
 - `--dry-run` finds new releases and prints them. It does not post and does not save anything.
 - `--once` does one real check and then exits.
 
+## Uptime Kuma
+
+You can monitor the program with an Uptime Kuma push monitor. In Uptime Kuma, add a monitor of type Push. Set the heartbeat interval to a little more than 6 hours, because the longest gap between checks is 6 hours. Copy the push URL into `UPTIME_KUMA_PUSH_URL` in `.env`.
+
+After each check, the program sends one heartbeat. If the check finished, the heartbeat status is `up`. If the check crashed, the status is `down`. The message shows how many releases were posted and how many issues occurred. If you leave the variable empty, the program sends nothing.
+
 ## Configuration
 
 You set these values in `.env`.
@@ -76,6 +82,7 @@ You set these values in `.env`.
 | `SCHEDULE` | `00:15,06:00,12:00,18:00` | Check times in HH:MM, server time. |
 | `REQUEST_DELAY_MS` | `200` | Minimum gap between Deezer requests. |
 | `RUN_ON_START` | `false` | If `true`, run one check at container start. |
+| `UPTIME_KUMA_PUSH_URL` | empty | Uptime Kuma push URL. If empty, the program sends no heartbeat. |
 | `LOG_LEVEL` | `INFO` | Log detail. |
 
 ## Development
