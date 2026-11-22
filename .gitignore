@@ -1,0 +1,7 @@
+.env
+data/state.db*
+data/artists.txt
+__pycache__/
+.pytest_cache/
+.venv/
+*.pyc

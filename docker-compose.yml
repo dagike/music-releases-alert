@@ -1,0 +1,10 @@
+services:
+  music-alert:
+    build: .
+    container_name: music-releases-alert
+    restart: unless-stopped
+    env_file: .env
+    volumes:
+      - ./data:/app/data
+      # Use the Raspberry Pi time zone for the schedule.
+      - /etc/localtime:/etc/localtime:ro

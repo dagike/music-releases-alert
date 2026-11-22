@@ -1,0 +1,10 @@
+# One artist per line. Lines that start with # are ignored.
+
+# A plain name. The program finds the Deezer ID and remembers it.
+Daft Punk
+
+# A name with a pinned Deezer ID. Use this when the match is ambiguous.
+Justice | 1234
+
+# A Deezer ID only.
+deezer:27
