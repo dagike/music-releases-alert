@@ -70,7 +70,7 @@ docker compose run --rm music-alert python -m music_alert --once
 
 ## Uptime Kuma
 
-You can monitor the program with an Uptime Kuma push monitor. In Uptime Kuma, add a monitor of type Push. Set the heartbeat interval to a little more than 6 hours, because the longest gap between checks is 6 hours. Copy the push URL into `UPTIME_KUMA_PUSH_URL` in `.env`.
+You can monitor the program with an Uptime Kuma push monitor. In Uptime Kuma, add a monitor of type Push. Set the heartbeat interval to 24300 seconds, which is 6 hours 45 minutes. The longest gap between checks is 6 hours 15 minutes, from 18:00 to 00:15. The extra 30 minutes cover the time that a check takes. Copy the push URL into `UPTIME_KUMA_PUSH_URL` in `.env`.
 
 After each check, the program sends one heartbeat. If the check finished, the heartbeat status is `up`. If the check crashed, the status is `down`. The message shows how many releases were posted and how many issues occurred. If you leave the variable empty, the program sends nothing.
 
