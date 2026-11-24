@@ -20,6 +20,7 @@ class Config:
     log_level: str = "INFO"
     run_on_start: bool = False
     kuma_push_url: str = ""
+    max_age_days: int = 60
 
 
 def load_config(env: Mapping[str, str] | None = None) -> Config:
@@ -33,4 +34,5 @@ def load_config(env: Mapping[str, str] | None = None) -> Config:
         log_level=env.get("LOG_LEVEL", "INFO").upper(),
         run_on_start=env.get("RUN_ON_START", "false").strip().lower() in ("1", "true", "yes"),
         kuma_push_url=env.get("UPTIME_KUMA_PUSH_URL", "").strip(),
+        max_age_days=int(env.get("MAX_AGE_DAYS", "60")),
     )

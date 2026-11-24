@@ -14,6 +14,8 @@ The program matches each artist name to a Deezer artist ID. It saves the ID in a
 
 On the first check of an artist, the program posts only releases from the current year. It records older releases as seen without posting them.
 
+On later checks, the program posts only releases with a release date in the last 60 days. Deezer sometimes adds old releases to an artist page later, for example features, remixes, or re-delivered catalog. The program records these as seen without posting them. You can change the window with `MAX_AGE_DAYS`.
+
 The program sends a warning to Discord in these cases:
 - A name matches more than one Deezer artist, or has no exact match. The warning names the artist that the program chose and lists other candidates.
 - A name finds no artist on Deezer.
@@ -85,6 +87,7 @@ You set these values in `.env`.
 | `REQUEST_DELAY_MS` | `200` | Minimum gap between Deezer requests. |
 | `RUN_ON_START` | `false` | If `true`, run one check at container start. |
 | `UPTIME_KUMA_PUSH_URL` | empty | Uptime Kuma push URL. If empty, the program sends no heartbeat. |
+| `MAX_AGE_DAYS` | `60` | Post only releases dated within this many days. |
 | `LOG_LEVEL` | `INFO` | Log detail. |
 
 ## Development

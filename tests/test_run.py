@@ -203,3 +203,40 @@ def test_summary_failure_is_an_issue_and_keeps_releases_marked(setup):
     result = run_cycle(cfg, store, deezer, FakeDiscord(fail_summary=True), today=TODAY)
     assert any("summary" in issue for issue in result.issues)
     assert store.has_release(11)  # not posted again next run
+
+
+def test_old_release_added_later_is_saved_but_not_posted(setup):
+    cfg, store, artists_file = setup
+    artists_file.write_text("Justice\n")
+    deezer = FakeDeezer(search={"Justice": [artist(1, "Justice")]},
+                        albums={1: [album(11, "New", "2026-03-01")]})
+    discord = FakeDiscord()
+    run_cycle(cfg, store, deezer, discord, today=TODAY)
+
+    # Deezer adds an old feature, a borderline one, and an undated one later.
+    deezer.albums[1] += [
+        album(20, "Old feature", "2018-10-11"),
+        album(21, "Just outside", "2026-09-22"),  # 61 days before TODAY
+        album(22, "Just inside", "2026-09-23"),   # 60 days before TODAY
+        album(23, "No date", ""),
+    ]
+    result = run_cycle(cfg, store, deezer, discord, today=TODAY)
+    assert [r.title for r in result.posted] == ["Just inside"]
+    assert store.has_release(20) and store.has_release(21) and store.has_release(23)
+
+    again = run_cycle(cfg, store, deezer, discord, today=TODAY)
+    assert again.posted == []
+
+
+def test_partial_first_run_failure_keeps_first_run_rule(setup):
+    cfg, store, artists_file = setup
+    artists_file.write_text("Justice\n")
+    deezer = FakeDeezer(search={"Justice": [artist(1, "Justice")]},
+                        albums={1: [album(11, "New", "2026-03-01"), album(10, "Old", "2020-01-01")]})
+    run_cycle(cfg, store, deezer, FakeDiscord(fail=True), today=TODAY)
+    assert not store.artist_initialized(1)
+    assert store.has_release(10)  # old one already saved as seen
+
+    ok = run_cycle(cfg, store, deezer, FakeDiscord(), today=TODAY)
+    assert [r.title for r in ok.posted] == ["New"]
+    assert store.artist_initialized(1)

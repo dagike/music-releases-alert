@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import logging
 from dataclasses import dataclass, field
-from datetime import date
+from datetime import date, timedelta
 
 from .artists_file import read_artists_file
 from .config import Config
@@ -24,6 +24,14 @@ class CycleResult:
     alerts: list[Resolution] = field(default_factory=list)
 
 
+def _is_recent(release_date: str, cutoff: date) -> bool:
+    """True if the release date is on or after the cutoff. A bad date counts as old."""
+    try:
+        return date.fromisoformat(release_date) >= cutoff
+    except ValueError:
+        return False
+
+
 def _to_release(album: dict, res: Resolution) -> Release:
     return Release(
         album_id=album["id"],
@@ -41,7 +49,9 @@ def run_cycle(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord 
               dry_run: bool = False, today: date | None = None) -> CycleResult:
     """Check every artist once and post what is new."""
     result = CycleResult()
-    year = str((today or date.today()).year)
+    today = today or date.today()
+    year = str(today.year)
+    cutoff = today - timedelta(days=cfg.max_age_days)
 
     try:
         entries = read_artists_file(cfg.artists_file)
@@ -71,6 +81,10 @@ def run_cycle(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord 
 
     # 2. Find releases that we have not seen.
     pending: dict[int, Release] = {}
+    # First-run artists with releases to post stay "not initialized" until those
+    # posts succeed. A failed post is then retried under the first-run rule,
+    # not dropped by the age window.
+    first_run_waiting: dict[int, set[int]] = {}
     for artist_id, res in resolved.items():
         try:
             albums = deezer.artist_albums(artist_id)
@@ -80,14 +94,20 @@ def run_cycle(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord 
         first_run = not store.artist_initialized(artist_id)
         for album in albums:
             rel = _to_release(album, res)
-            if store.has_release(rel.album_id) or rel.album_id in pending:
+            if store.has_release(rel.album_id):
                 continue
-            if first_run and not rel.release_date.startswith(year):
+            if first_run:
+                wanted = rel.release_date.startswith(year)
+            else:
+                wanted = _is_recent(rel.release_date, cutoff)
+            if not wanted:
                 if not dry_run:
                     store.add_release(rel, "seeded")  # old release: remember, do not post
                 continue
-            pending[rel.album_id] = rel
-        if first_run and not dry_run:
+            if first_run:
+                first_run_waiting.setdefault(artist_id, set()).add(rel.album_id)
+            pending.setdefault(rel.album_id, rel)  # same album under two artists: once
+        if first_run and artist_id not in first_run_waiting and not dry_run:
             store.mark_initialized(artist_id)
 
     releases = sorted(pending.values(), key=lambda r: (r.release_date, r.artist_name, r.title))
@@ -110,6 +130,11 @@ def run_cycle(cfg: Config, store: Store, deezer: DeezerClient, discord: Discord 
             for rel in batch:
                 store.add_release(rel, "posted")
             result.posted.extend(batch)
+
+        posted_ids = {rel.album_id for rel in result.posted}
+        for artist_id, wanted_ids in first_run_waiting.items():
+            if wanted_ids <= posted_ids:
+                store.mark_initialized(artist_id)
 
     # 3b. Send one grouped text summary of what was posted.
     if result.posted:
